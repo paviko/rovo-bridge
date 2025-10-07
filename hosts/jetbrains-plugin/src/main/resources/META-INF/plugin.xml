@@ -1,0 +1,50 @@
+<idea-plugin>
+  <vendor email="dev@example.com" url="https://github.com/rovobridge/rovobridge">RovoBridge</vendor>
+  <id>paviko.rovobridge</id>
+  <name>RovoBridge</name>
+  <description>Runs local RovoBridge backend and displays the chat UI.</description>
+
+  <depends>com.intellij.modules.platform</depends>
+  <depends>org.jetbrains.plugins.terminal</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <toolWindow id="RovoBridge" factoryClass="paviko.rovobridge.ui.ChatToolWindowFactory" anchor="right" canCloseContent="true" icon="/icons/rovobridgeToolWindow.svg"/>
+    <applicationConfigurable parentId="tools" instance="paviko.rovobridge.settings.RovoBridgeConfigurable"
+                           id="paviko.rovobridge.settings.RovoBridgeConfigurable"
+                           displayName="RovoBridge Plug"/>
+    <applicationService serviceImplementation="paviko.rovobridge.settings.RovoBridgeSettings"/>
+  </extensions>
+
+  <actions>
+    <action id="paviko.rovobridge.actions.ProjectAddToContextAction"
+            class="paviko.rovobridge.actions.ProjectAddToContextAction"
+            text="RovoBridge: Add to context">
+      <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+    </action>
+
+    <action id="paviko.rovobridge.actions.ProjectPastePathAction"
+            class="paviko.rovobridge.actions.ProjectPastePathAction"
+            text="RovoBridge: paste path">
+      <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+    </action>
+
+    <action id="paviko.rovobridge.actions.EditorAddToContextAction"
+            class="paviko.rovobridge.actions.EditorAddToContextAction"
+            text="RovoBridge: Add to context">
+      <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+      <add-to-group group-id="EditorTabPopupMenu" anchor="last"/>
+      <keyboard-shortcut keymap="$default" first-keystroke="ctrl COMMA"/>
+      <keyboard-shortcut keymap="Mac OS X" first-keystroke="meta BACK_SLASH"/>
+      <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="meta BACK_SLASH"/>
+    </action>
+
+    <action id="paviko.rovobridge.actions.EditorAddLinesToContextAction"
+            class="paviko.rovobridge.actions.EditorAddLinesToContextAction"
+            text="RovoBridge: Add lines to context">
+      <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+      <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift COMMA"/>
+      <keyboard-shortcut keymap="Mac OS X" first-keystroke="meta shift BACK_SLASH"/>
+      <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="meta shift BACK_SLASH"/>
+    </action>
+  </actions>
+</idea-plugin>

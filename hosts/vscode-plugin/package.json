@@ -1,0 +1,246 @@
+{
+  "name": "rovobridge",
+  "displayName": "RovoBridge",
+  "description": "Terminal bridge with web UI for VSCode - mirrors JetBrains plugin functionality",
+  "version": "0.1.0",
+  "publisher": "rovobridge",
+  "author": {
+    "name": "RovoBridge Team"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/rovobridge/rovobridge",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rovobridge/rovobridge.git",
+    "directory": "hosts/vscode-plugin"
+  },
+  "bugs": {
+    "url": "https://github.com/rovobridge/rovobridge/issues"
+  },
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other",
+    "Developer Tools",
+    "Terminal"
+  ],
+  "icon": "resources/icon.png",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "keywords": [
+    "terminal",
+    "bridge",
+    "cli",
+    "development"
+  ],
+  "activationEvents": [
+    "onView:rovobridge.main",
+    "onCommand:rovobridge.openPanel",
+    "onCommand:rovobridge.addFileToContext",
+    "onCommand:rovobridge.addLinesToContext",
+    "onCommand:rovobridge.pastePath",
+    "onCommand:rovobridge.showDiagnostics"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "rovobridge.openPanel",
+        "title": "Open RovoBridge Panel",
+        "category": "RovoBridge",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "rovobridge.addFileToContext",
+        "title": "RovoBridge: Add to context",
+        "category": "RovoBridge"
+      },
+      {
+        "command": "rovobridge.addLinesToContext",
+        "title": "RovoBridge: Add lines to context",
+        "category": "RovoBridge"
+      },
+      {
+        "command": "rovobridge.pastePath",
+        "title": "RovoBridge: Paste path",
+        "category": "RovoBridge"
+      },
+      {
+        "command": "rovobridge.showDiagnostics",
+        "title": "RovoBridge: Show Diagnostics",
+        "category": "RovoBridge",
+        "icon": "$(info)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "rovobridge",
+          "title": "RovoBridge",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "rovobridge": [
+        {
+          "type": "webview",
+          "id": "rovobridge.main",
+          "name": "Terminal Bridge",
+          "icon": "resources/icon.svg",
+          "webview": {
+            "retainContextWhenHidden": true
+          }
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "rovobridge.openPanel",
+          "when": "view == rovobridge.main",
+          "group": "navigation@1"
+        },
+        {
+          "command": "rovobridge.showDiagnostics",
+          "when": "view == rovobridge.main",
+          "group": "navigation@2"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "rovobridge.addFileToContext",
+          "group": "rovobridge@1",
+          "when": "resourceScheme == file && !explorerResourceIsFolder"
+        },
+        {
+          "command": "rovobridge.addFileToContext",
+          "group": "rovobridge@1",
+          "when": "resourceScheme == file && explorerResourceIsFolder"
+        },
+        {
+          "command": "rovobridge.pastePath",
+          "group": "rovobridge@2",
+          "when": "resourceScheme == file && explorerResourceIsFolder"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "rovobridge.addFileToContext",
+          "group": "rovobridge@1"
+        },
+        {
+          "command": "rovobridge.addLinesToContext",
+          "group": "rovobridge@2",
+          "when": "editorHasSelection"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "rovobridge.addFileToContext",
+          "group": "rovobridge@9",
+          "when": "resourceScheme == file"
+        }
+      ],
+      "openEditors/context": [
+        {
+          "command": "rovobridge.addFileToContext",
+          "group": "rovobridge@9",
+          "when": "resourceScheme == file"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "rovobridge.addFileToContext",
+        "key": "ctrl+'",
+        "mac": "cmd+'",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "rovobridge.addLinesToContext",
+        "key": "ctrl+shift+'",
+        "mac": "cmd+shift+'",
+        "when": "editorTextFocus && editorHasSelection"
+      }
+    ],
+    "configuration": {
+      "title": "RovoBridge",
+      "properties": {
+        "rovobridge.customCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Custom command to run in the terminal (optional)"
+        },
+        "rovobridge.uiMode": {
+          "type": "string",
+          "enum": [
+            "Terminal",
+            "Canvas"
+          ],
+          "default": "Terminal",
+          "description": "UI mode for the RovoBridge interface"
+        },
+        "rovobridge.fontSize": {
+          "type": "number",
+          "default": 12,
+          "minimum": 8,
+          "maximum": 72,
+          "description": "Font size for the terminal interface"
+        },
+        "rovobridge.chipsCollapsed": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the chips panel is collapsed by default"
+        },
+        "rovobridge.composerCollapsed": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the composer panel is collapsed by default"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run copy-license && npm run compile",
+    "copy-license": "node -e \"const fs=require('fs'); const path=require('path'); const src=path.resolve(__dirname,'..','..','LICENSE'); const dest=path.resolve(__dirname,'LICENSE'); if(fs.existsSync(src)){fs.copyFileSync(src,dest); console.log('Copied LICENSE to extension root');} else { console.warn('Root LICENSE not found at '+src); }\"",
+    "compile": "tsc -p ./ && tsc -p ./tsconfig.test.json",
+    "compile:production": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "pnpm run compile && pnpm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "vscode-test",
+    "test:script": "./scripts/test.sh",
+    "package": "./scripts/build.sh --production --skip-tests",
+    "package:dev": "./scripts/build.sh --skip-tests",
+    "package:pre-release": "pnpm run compile:production && vsce package --pre-release",
+    "publish": "pnpm run compile:production && vsce publish",
+    "publish:pre-release": "pnpm run compile:production && vsce publish --pre-release",
+    "install:vsce": "npm install -g @vscode/vsce",
+    "clean": "rimraf out *.vsix",
+    "build:binaries": "cd ../../ && ./scripts/build_rovo_bridge.sh",
+    "prebuild": "pnpm run build:binaries && pnpm run compile:production"
+  },
+  "devDependencies": {
+    "@types/glob": "^9.0.0",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "18.x",
+    "@types/sinon": "^17.0.2",
+    "@types/vscode": "^1.74.0",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "@vscode/test-cli": "^0.0.4",
+    "@vscode/test-electron": "^2.3.8",
+    "@vscode/vsce": "^2.22.0",
+    "eslint": "^8.56.0",
+    "glob": "^11.0.3",
+    "mocha": "^10.2.0",
+    "rimraf": "^5.0.5",
+    "sinon": "^17.0.1",
+    "typescript": "^5.0.0"
+  },
+  "packageManager": "pnpm@9.0.0+sha512.b4106707c7225b1748b61595953ccbebff97b54ad05d002aa3635f633b9c53cd666f7ce9b8bc44704f1fa048b9a49b55371ab2d9e9d667d1efe2ef1514bcd513"
+}
