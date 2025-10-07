@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' http://127.0.0.1:* https://127.0.0.1:* ${cspSource}; style-src 'unsafe-inline' http://127.0.0.1:* https://127.0.0.1:* ${cspSource}; img-src 'self' data: http://127.0.0.1:* https://127.0.0.1:* https://*.vscode-cdn.net; connect-src ws://127.0.0.1:* wss://127.0.0.1:* http://127.0.0.1:* https://127.0.0.1:*; font-src 'self' data: http://127.0.0.1:* https://127.0.0.1:*; media-src 'self' http://127.0.0.1:* https://127.0.0.1:*; frame-src http://127.0.0.1:* https://127.0.0.1:*; object-src 'none'; base-uri 'none'" />
+  <title>RovoBridge</title>
+  <style>
+    html, body { height: 100%; width: 100%; margin: 0; padding: 0; background: #1e1e1e; overflow: hidden; }
+    #loading { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #ccc; font-size: 13px; }
+    #webui-container { display: none; position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
+    #webui-frame { position: absolute; top: 0; right: 0; bottom: 0; left: 0; width: 100%; height: 100%; border: none; background: #1e1e1e; display: block; }
+    .spinner { width: 16px; height: 16px; border: 2px solid #333; border-top: 2px solid #007acc; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 8px; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .error-container { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #f48771; text-align: center; padding: 12px; }
+    .retry-button { background: #0e639c; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <div class="spinner"></div>
+    <div>Starting RovoBridge...</div>
+    <div id="status">Initializing backend...</div>
+  </div>
+  <div id="webui-container">
+    <iframe id="webui-frame" src="${uiUrl}" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-pointer-lock allow-top-navigation-by-user-activation" allow="cross-origin-isolated; autoplay; clipboard-read; clipboard-write;"></iframe>
+  </div>
+  <script>
+    window.vscode = acquireVsCodeApi();
+    let uiLoaded = false; let loadTimeout;
+    const iframe = document.getElementById('webui-frame');
+    const loading = document.getElementById('loading');
+    const container = document.getElementById('webui-container');
+    const status = document.getElementById('status');
+    function updateStatus(message) { if (status) status.textContent = message; }
+    function showError(title, message) {
+      document.body.innerHTML = '<div class="error-container"><div style="font-weight:bold;margin-bottom:6px">'+title+'</div><div style="margin-bottom:10px">'+message+'</div><button class="retry-button" onclick="location.reload()">Retry</button></div>';
+    }
+    iframe.onload = function(){ 
+      clearTimeout(loadTimeout); 
+      uiLoaded = true; 
+      loading.style.display='none'; 
+      container.style.display='block'; 
+      
+      // Send parent origin to iframe for secure communication
+      try {
+        const targetOrigin = new URL('${uiUrl}').origin;
+        iframe.contentWindow.postMessage({ 
+          type: 'setParentOrigin', 
+          origin: window.origin 
+        }, targetOrigin);
+      } catch (e) {
+        console.error('Failed to send parent origin to iframe:', e);
+      }
+      
+      window.vscode.postMessage({ type: 'uiLoaded', success: true });
+    };
+    iframe.onerror = function () {
+      clearTimeout(loadTimeout);
+      showError('Failed to Load RovoBridge UI', 'Could not load the web interface.');
+      window.vscode.postMessage({type: 'uiLoaded', success: false, error: 'iframe load error'});
+    };
+    loadTimeout = setTimeout(() => {
+      if (!uiLoaded) {
+        showError('RovoBridge UI Load Timeout', 'The web interface took too long to load.');
+        window.vscode.postMessage({type: 'uiLoaded', success: false, error: 'load timeout'});
+      }
+    }, 30000);
+    window.addEventListener('message', event => {
+      const message = event.data;
+
+      // Check if message is coming from the iframe (child)
+      if (event.source === iframe.contentWindow) {
+        // Validate origin for security - only accept messages from the expected iframe origin
+        try {
+          const expectedOrigin = new URL('${uiUrl}').origin;
+          if (event.origin !== expectedOrigin) {
+            console.warn('Message from iframe rejected due to invalid origin:', event.origin);
+            return;
+          }
+        } catch (e) {
+          console.error('Failed to validate iframe origin:', e);
+          return;
+        }
+        
+        // Handle keyboard events from iframe (macOS fix)
+        if (message && (message.type === 'keydown-event' || message.type === 'keyup-event')) {
+          try {
+            const { ctrlKey, metaKey, shiftKey, altKey, code, key, hasSelection } = message.payload;
+            
+            // Handle specific VSCode shortcuts that need to be forwarded
+            if (message.type === 'keydown-event') {
+              // Command Palette (Cmd+Shift+P)
+              if (metaKey && shiftKey && code === "KeyP") {
+                window.vscode.postMessage({
+                  type: 'executeCommand',
+                  command: 'workbench.action.showCommands'
+                });
+                return;
+              }
+              
+              // Quick Open (Cmd+P)
+              if (metaKey && !shiftKey && code === "KeyP") {
+                window.vscode.postMessage({
+                  type: 'executeCommand',
+                  command: 'workbench.action.quickOpen'
+                });
+                return;
+              }
+              
+              // Save (Cmd+S)
+              if (metaKey && code === "KeyS") {
+                window.vscode.postMessage({
+                  type: 'executeCommand',
+                  command: 'workbench.action.files.save'
+                });
+                return;
+              }
+              
+              // Select All (Cmd+A) - forward to VSCode if no selection in iframe
+              if (metaKey && code === "KeyA" && !hasSelection) {
+                window.vscode.postMessage({
+                  type: 'executeCommand',
+                  command: 'editor.action.selectAll'
+                });
+                return;
+              }
+              
+              // New File (Cmd+N)
+              if (metaKey && code === "KeyN") {
+                window.vscode.postMessage({
+                  type: 'executeCommand',
+                  command: 'workbench.action.files.newUntitledFile'
+                });
+                return;
+              }
+              
+              // Find (Cmd+F)
+              if (metaKey && code === "KeyF") {
+                window.vscode.postMessage({
+                  type: 'executeCommand',
+                  command: 'actions.find'
+                });
+                return;
+              }
+              
+              // Undo (Cmd+Z)
+              if (metaKey && !shiftKey && code === "KeyZ") {
+                window.vscode.postMessage({
+                  type: 'executeCommand',
+                  command: 'undo'
+                });
+                return;
+              }
+              
+              // Redo (Cmd+Shift+Z)
+              if (metaKey && shiftKey && code === "KeyZ") {
+                window.vscode.postMessage({
+                  type: 'executeCommand',
+                  command: 'redo'
+                });
+                return;
+              }
+              
+              // Copy (Cmd+C) - macOS only
+              if (metaKey && code === "KeyC") {
+                window.vscode.postMessage({
+                  type: 'executeCommand',
+                  command: 'editor.action.clipboardCopyAction'
+                });
+                return;
+              }
+              
+              // Paste (Cmd+V) - macOS only
+              if (metaKey && code === "KeyV") {
+                window.vscode.postMessage({
+                  type: 'executeCommand',
+                  command: 'editor.action.clipboardPasteAction'
+                });
+                return;
+              }
+            }
+            
+            // Forward the keyboard event to VSCode extension for any additional handling
+            window.vscode.postMessage({
+              type: 'keyboardEvent',
+              eventType: message.type,
+              payload: message.payload
+            });
+          } catch (e) {
+            console.error('Failed to handle keyboard event from iframe:', e);
+          }
+          return;
+        }
+        
+        // Handle other messages FROM iframe - forward to VS Code extension
+        if (message && message.type) {
+          try {
+            window.vscode.postMessage(message);
+          } catch (e) {
+            console.error('Failed to forward message to VS Code:', e);
+          }
+        }
+      } else {
+        // Handle messages TO iframe (from VS Code extension)
+        if (message && message.type) {
+          try {
+            const targetOrigin = new URL('${uiUrl}').origin;
+            iframe.contentWindow.postMessage(message, targetOrigin);
+          } catch (e) {
+            console.error('Forwarding message to iframe failed', e);
+          }
+        }
+      }
+    });
+    
+    // macOS drag and drop event forwarding to iframe
+    // Capture drag events on the webview container and forward them to iframe
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventType => {
+      document.addEventListener(eventType, (event) => {
+        try {
+          // Prevent default to allow drop
+          if (eventType === 'dragover' || eventType === 'dragenter') {
+            event.preventDefault();
+            if (event.dataTransfer) {
+              event.dataTransfer.dropEffect = 'copy';
+            }
+          }
+          
+          // Extract relevant data from the drag event
+          const payload = {
+            clientX: event.clientX,
+            clientY: event.clientY,
+            shiftKey: event.shiftKey,
+            dataTransfer: null
+          };
+          
+          // Try to extract dataTransfer data (limited by security)
+          if (event.dataTransfer) {
+            try {
+              const dataTransfer = {
+                types: Array.from(event.dataTransfer.types || []),
+                effectAllowed: event.dataTransfer.effectAllowed,
+                dropEffect: event.dataTransfer.dropEffect,
+                data: {}
+              };
+              
+              // Try to get data for each type
+              for (const type of dataTransfer.types) {
+                try {
+                  dataTransfer.data[type] = event.dataTransfer.getData(type);
+                } catch (e) {
+                  // Some data types may not be accessible due to security restrictions
+                }
+              }
+              
+              // Debug logging to see what we're forwarding
+              // console.log('[VSCode Webview] Forwarding drag event:', {
+              //   eventType,
+              //   dataTransfer: {
+              //     types: dataTransfer.types,
+              //     effectAllowed: dataTransfer.effectAllowed,
+              //     dropEffect: dataTransfer.dropEffect,
+              //     data: dataTransfer.data,
+              //     hasFiles: !!event.dataTransfer.files,
+              //     filesLength: event.dataTransfer.files ? event.dataTransfer.files.length : 0
+              //   }
+              // });
+              
+              payload.dataTransfer = dataTransfer;
+            } catch (e) {
+              console.debug('Failed to extract dataTransfer data:', e);
+            }
+          }
+          
+          // Forward the drag event to iframe
+          if (iframe && iframe.contentWindow) {
+            const targetOrigin = new URL('${uiUrl}').origin;
+            iframe.contentWindow.postMessage({
+              type: 'drag-event',
+              eventType: eventType,
+              payload: payload
+            }, targetOrigin);
+          }
+          
+          // For drop events, also prevent default to avoid browser handling
+          if (eventType === 'drop') {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        } catch (e) {
+          console.debug('Failed to forward drag event to iframe:', e);
+        }
+      }, true); // Use capture phase to ensure we get the events first
+    });
+  </script>
+</body>
+</html>

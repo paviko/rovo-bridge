@@ -1,0 +1,227 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: |
+            web-ui/pnpm-lock.yaml
+            hosts/vscode-plugin/pnpm-lock.yaml
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: true
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "prerelease=${{ github.event.inputs.prerelease }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            if [[ "${GITHUB_REF#refs/tags/}" == *"-"* ]]; then
+              echo "prerelease=true" >> $GITHUB_OUTPUT
+            else
+              echo "prerelease=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Install web-ui dependencies
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web-ui
+        working-directory: web-ui
+        run: pnpm run build
+
+      - name: Build backend binaries
+        run: ./scripts/build_rovo_bridge.sh
+
+      - name: Install VSCode plugin dependencies (all)
+        working-directory: hosts/vscode-plugin
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --frozen-lockfile
+          else
+            npm ci
+          fi
+
+      - name: Compile VSCode plugin TypeScript
+        working-directory: hosts/vscode-plugin
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm run compile:production
+          else
+            npm run compile:production
+          fi
+
+      - name: Package VSCode plugin from staging (no prepublish)
+        working-directory: hosts/vscode-plugin
+        run: |
+          STAGE_DIR="../tmp_rovodev_vscode_stage"
+          rm -rf "$STAGE_DIR"
+          mkdir -p "$STAGE_DIR"
+          
+          # Copy minimal required files
+          cp package.json "$STAGE_DIR/"
+          cp -R out "$STAGE_DIR/out"
+          cp -R resources "$STAGE_DIR/resources"
+          [ -f README.md ] && cp README.md "$STAGE_DIR/" || true
+          [ -f CHANGELOG.md ] && cp CHANGELOG.md "$STAGE_DIR/" || true
+          [ -f ../../LICENSE ] && cp ../../LICENSE "$STAGE_DIR/" || true
+          
+          # Sanitize package.json: remove scripts and devDependencies
+          node -e '
+            const fs=require("fs");
+            const path=require("path");
+            const pkgPath=path.resolve(process.cwd(), "../tmp_rovodev_vscode_stage/package.json");
+            const pkg=JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+            delete pkg.scripts;
+            delete pkg.devDependencies;
+            fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
+          '
+          
+          # Package from staging directory without touching dependencies
+          ( cd "$STAGE_DIR" && npx -y @vscode/vsce package --no-dependencies --out "rovobridge-$(date +%Y%m%d-%H%M%S).vsix" )
+          
+          # Move artifact back into plugin dir for later collection
+          mv "$STAGE_DIR"/*.vsix .
+          
+          # Clean up staging
+          rm -rf "$STAGE_DIR"
+
+      - name: Build JetBrains plugin distribution
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: 8.7
+          arguments: buildPlugin
+          build-root-directory: hosts/jetbrains-plugin
+
+      - name: Prepare release artifacts
+        run: |
+          mkdir -p release-artifacts
+          
+          # Find and copy VSCode extension
+          find hosts/vscode-plugin -name "*.vsix" -type f -exec cp {} release-artifacts/ \;
+          
+          # Find and copy JetBrains plugin
+          find hosts/jetbrains-plugin/build/distributions -name "*.zip" -type f -exec cp {} release-artifacts/ \;
+          
+          # Rename artifacts with version
+          cd release-artifacts
+          for file in *.vsix; do
+            if [ -f "$file" ]; then
+              mv "$file" "rovobridge-vscode-${{ steps.version.outputs.version }}.vsix"
+            fi
+          done
+          
+          for file in *.zip; do
+            if [ -f "$file" ]; then
+              mv "$file" "rovobridge-jetbrains-${{ steps.version.outputs.version }}.zip"
+            fi
+          done
+          
+          ls -la
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
+          prerelease: ${{ steps.version.outputs.prerelease }}
+          generate_release_notes: true
+          files: |
+            release-artifacts/*
+          body: |
+            ## RovoBridge Release ${{ steps.version.outputs.version }}
+            
+            This release includes:
+            - **VSCode Extension**: `rovobridge-vscode-${{ steps.version.outputs.version }}.vsix`
+            - **JetBrains Plugin**: `rovobridge-jetbrains-${{ steps.version.outputs.version }}.zip`
+            
+            ### Installation Instructions
+            
+            #### VSCode Extension
+            1. Download `rovobridge-vscode-${{ steps.version.outputs.version }}.vsix`
+            2. Install using: `code --install-extension rovobridge-vscode-${{ steps.version.outputs.version }}.vsix`
+            
+            #### JetBrains Plugin
+            1. Download `rovobridge-jetbrains-${{ steps.version.outputs.version }}.zip`
+            2. In your JetBrains IDE, go to Settings → Plugins → Install Plugin from Disk
+            3. Select the downloaded zip file
+            
+            ### What's Changed
+            See the auto-generated release notes below for detailed changes.
+
+  test-artifacts:
+    runs-on: ubuntu-latest
+    needs: build-release
+    if: always()
+    
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: ./test-artifacts
+        continue-on-error: true
+
+      - name: Verify artifacts
+        run: |
+          echo "Checking release artifacts..."
+          ls -la ./test-artifacts/ || echo "No artifacts found"
+          
+          # Check if VSCode extension exists
+          if ls ./test-artifacts/*.vsix 1> /dev/null 2>&1; then
+            echo "✓ VSCode extension found"
+          else
+            echo "✗ VSCode extension missing"
+          fi
+          
+          # Check if JetBrains plugin exists
+          if ls ./test-artifacts/*.zip 1> /dev/null 2>&1; then
+            echo "✓ JetBrains plugin found"
+          else
+            echo "✗ JetBrains plugin missing"
+          fi

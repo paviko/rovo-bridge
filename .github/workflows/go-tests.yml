@@ -1,0 +1,47 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, master, '**' ]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+
+      - name: Install frontend deps
+        working-directory: web-ui
+        run: pnpm install
+
+      - name: Type-check frontend
+        working-directory: web-ui
+        run: pnpm run typecheck
+
+      - name: Build frontend
+        working-directory: web-ui
+        run: pnpm run build
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: true
+
+      - name: Run backend tests
+        working-directory: backend
+        run: go test ./...

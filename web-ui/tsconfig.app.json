@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "skipLibCheck": true,
+    "types": ["node", "vite/client"]
+  },
+  "include": [
+    "src",
+    "src/vite-env.d.ts"
+  ],
+  "exclude": [
+    "src/test",
+    "node_modules",
+    "dist"
+  ]
+}

@@ -1,0 +1,52 @@
+# Development files
+.vscode/**
+.vscode-test/**
+src/**
+.gitignore
+.yarnrc
+vsc-extension-quickstart.md
+**/tsconfig.json
+**/.eslintrc.json
+**/*.map
+**/*.ts
+
+# Dependencies (exclude node_modules but keep compiled output)
+node_modules/**
+
+# Test files and fixtures
+test-fixtures/**
+scripts/test.sh
+
+# Build artifacts to exclude
+*.vsix
+
+# Documentation
+
+ERROR_HANDLING.md
+TESTING.md
+
+# Lock files (keep package.json but exclude lock files)
+pnpm-lock.yaml
+yarn.lock
+package-lock.json
+
+# IDE specific files
+.idea/**
+*.swp
+*.swo
+*~
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Include compiled JavaScript output
+!out/**/*.js
+!out/**/*.js.map
+
+# Include resources (binaries)
+!resources/**

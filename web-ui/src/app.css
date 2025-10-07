@@ -1,0 +1,619 @@
+/* Base layout */
+html, body {
+    height: 100%;
+    margin: 0;
+}
+
+#root {
+    display: flex;
+    flex-direction: column;
+}
+
+#topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: #f5f5f7;
+    border-bottom: 1px solid #e0e0e0;
+    font: 12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+}
+
+#topbar .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+}
+
+#topbar .status {
+    color: #555;
+}
+
+#chipbar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    align-content: flex-start; /* keep wrapped rows packed at the top */
+    gap: 4px;
+    padding: 4px 8px;
+    border-bottom: 1px solid #e0e0e0;
+    /* Allow the bar to grow in height to accommodate multiple rows of chips */
+    overflow: visible;
+    min-height: 24px;
+}
+
+/* Collapsible behavior */
+#chipbar.collapsed {
+    display: none; /* fully collapse and remove from tab order */
+}
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0px 4px 0px 2px;
+    border: 1px solid #b6cffc;
+    font: 12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    cursor: pointer;
+    background: #e7f1ff;
+    color: #1f5fbf;
+}
+
+.chip:hover {
+    background: #dbe9ff;
+}
+
+.chip .chip-at,
+#composer .composer-chip .chip-at {
+    font-size: 12px;
+    line-height: 1;
+    font-weight: 600;
+    color: #1f5fbf;
+    opacity: 1;
+}
+
+.chip .chip-label {
+    word-break: break-all;
+}
+
+#composer .composer-chip .chip-label {
+    word-break: break-all;
+}
+
+.chip .chip-range,
+#composer .composer-chip .chip-range {
+    font-size: 11px;
+    color: #1f5fbf;
+    background: #eef5ff;
+    border: 1px solid #b6cffc;
+    padding: 0 3px;
+    margin-left: 4px;
+}
+
+.chip .chip-check,
+#composer .composer-chip .chip-check {
+    margin-left: 4px;
+}
+
+/* History Modal Styles */
+.history-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.history-modal.hidden {
+    display: none;
+}
+
+.history-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    cursor: pointer;
+}
+
+.history-modal-content {
+    position: relative;
+    background: #fff;
+    border-radius: 0;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    width: min(90vw, 800px);
+    height: min(80vh, 600px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.history-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 20px;
+    border-bottom: 1px solid #e0e0e0;
+    background: #f5f5f7;
+}
+
+.history-modal-header h2 {
+    margin: 0;
+    font: 16px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    font-weight: 600;
+    color: #333;
+}
+
+.history-modal-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.history-search-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.history-search-container input[type="text"] {
+    padding: 6px 28px 6px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font: 12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    width: 200px;
+    outline: none;
+}
+
+.history-search-container input[type="text"]:focus {
+    border-color: #4a9eff;
+}
+
+.history-search-clear {
+    position: absolute;
+    right: 6px;
+    width: 18px;
+    height: 18px;
+    border: none;
+    background: rgba(0, 0, 0, 0.1);
+    color: #666;
+    border-radius: 50%;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    padding: 0;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.history-search-clear:hover {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+}
+
+.history-filter-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font: 12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    color: #555;
+    cursor: pointer;
+}
+
+.history-filter-toggle input[type="checkbox"] {
+    margin: 0;
+}
+
+.history-modal-body {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.history-list {
+    flex: 1;
+    /* Always show vertical scrollbar to prevent layout/focus shifts when it appears/disappears */
+    overflow-y: scroll;
+    /* Reserve space for scrollbar to prevent header/input layout shift */
+    scrollbar-gutter: stable;
+    /* Avoid scroll chaining that can cause subtle focus/scroll jumps */
+    overscroll-behavior: contain;
+    /* Isolate layout/paint to this scrolling container */
+    contain: layout paint;
+    padding: 8px;
+}
+
+/* History Item Styles */
+.history-item {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 8px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    background: #fafafa;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.history-item:hover {
+    background: #f0f6ff;
+    border-color: #b6cffc;
+}
+
+.history-item:focus {
+    outline: 2px solid #0b5;
+    outline-offset: 0;
+    box-shadow: 0 0 0 3px rgba(0, 187, 85, 0.15);
+}
+
+.history-item-content {
+    max-height: 68px;
+    overflow: hidden;
+    position: relative;
+    font: 12px Menlo, Consolas, monospace;
+    line-height: 1.4;
+    word-wrap: break-word;
+}
+
+.history-item-content.truncated {
+    position: relative;
+}
+
+.history-item-content.truncated::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 20px;
+    background: linear-gradient(to bottom, transparent 0%, rgba(255, 255, 255, 0.8) 70%, white 100%);
+    pointer-events: none;
+}
+
+.history-item:hover .history-item-content.truncated::after {
+    background: linear-gradient(to right, transparent, #f0f6ff 50%);
+}
+
+/* Preserve chip styling within history items */
+.history-item-content .composer-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0px 4px 0px 2px;
+    border: 1px solid #b6cffc;
+    font: 12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    background: #e7f1ff;
+    color: #1f5fbf;
+    border-radius: 3px;
+    margin: 0 2px;
+    vertical-align: middle;
+}
+
+.history-item-meta {
+    margin-top: 8px;
+    font: 11px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    color: #666;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.history-item-timestamp {
+    opacity: 0.8;
+}
+
+.history-item-project {
+    font-family: Menlo, Consolas, monospace;
+    font-size: 10px;
+    opacity: 0.8;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Permanent chips styling */
+.chip.permanent {
+    color: #000000;
+    background: #bac6d8;
+    border-color: #7c9bdf;
+    opacity: 1;
+}
+
+.chip.permanent .chip-check {
+    cursor: pointer;
+    opacity: 1;
+}
+
+.chip.permanent .chip-at {
+    color: #000;
+}
+
+/* xterm decoration bar */
+.deco-bar {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    pointer-events: auto;
+}
+
+.deco-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0px 4px;
+    border: 1px solid rgba(107, 114, 128, 0.5);
+    font: 12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    background: rgba(107, 114, 128, 0.15);
+}
+
+.deco-badge .deco-close {
+    cursor: pointer;
+    opacity: 0.6;
+    padding: 0 2px;
+}
+
+.deco-badge:hover .deco-close {
+    opacity: 1;
+}
+
+/* Composer styles */
+#composer {
+    border-top: 1px solid #e0e0e0;
+    padding: 6px 8px;
+    background: #fafafa;
+}
+#composer.collapsed { display: none; }
+#composer .composer-input {
+    position: relative;
+
+    min-height: 1.6em;
+    max-height: 60vh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    outline: none;
+    font: 12px Menlo, Consolas, monospace;
+    
+    /* Make scrollbar overlay on content without shifting text */
+    scrollbar-gutter: auto;
+}
+#composer .composer-input:empty:before {
+    content: attr(data-placeholder);
+    color: #888;
+}
+
+/* Custom scrollbar styling for composer input - overlay style */
+#composer .composer-input::-webkit-scrollbar {
+    width: 8px;
+}
+#composer .composer-input::-webkit-scrollbar-track {
+    background: transparent;
+}
+#composer .composer-input::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+#composer .composer-input::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+/* Firefox scrollbar styling */
+#composer .composer-input {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+/* @ mention overlay dropdown */
+#composer .composer-mention-overlay {
+    position: absolute;
+    z-index: 1000;
+    min-height: 60px;
+    max-height: 40vh; /* governed by CSS */
+    width: min(520px, 90%);
+    overflow: auto;
+    background: #fff;
+    border: 1px solid rgba(0,0,0,0.15);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    padding: 6px 0;
+}
+#composer .composer-mention-overlay.hidden {
+    display: none;
+}
+#composer .composer-mention-overlay .mention-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    font: 12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    cursor: pointer;
+}
+#composer .composer-mention-overlay .mention-empty {
+    padding: 8px 10px;
+    font: 12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    color: #666;
+    text-align: center;
+}
+#composer .composer-mention-overlay .mention-item:hover,
+#composer .composer-mention-overlay .mention-item.active {
+    background: #f0f6ff;
+}
+#composer .composer-mention-overlay .mention-short {
+    flex: 1 1 auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+#composer .composer-mention-overlay .mention-path {
+    font-family: Menlo, Consolas, monospace;
+    font-size: 11px;
+    opacity: 0.8;
+}
+#composer .composer-mention-overlay .mention-special {
+    color: #0b5;
+    font-weight: 600;
+}
+
+#composer .composer-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0px 4px 0px 2px;
+    border: 1px solid #b6cffc;
+    font: 12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    background: #e7f1ff;
+    color: #1f5fbf;
+}
+
+#composer .composer-chip:hover {
+    background: #dbe9ff;
+}
+
+#composer .composer-chip.permanent {
+    color: #000000;
+    background: #bac6d8;
+    border-color: #7c9bdf;
+    opacity: 1;
+}
+
+#composer .composer-chip.permanent .chip-at {
+    color: #000;
+}
+
+#term {
+    position: relative;
+    flex: 1 1 auto;
+}
+
+/* Focus outlines */
+#term:focus-within,
+#composer:focus-within {
+    outline: 2px solid #0b5; /* consistent accent used elsewhere */
+    outline-offset: 0px;
+    box-shadow: 0 0 0 3px rgba(0, 187, 85, 0.15);
+    transition: box-shadow .15s ease, outline-color .15s ease;
+}
+
+button {
+    font: inherit;
+    padding: 4px 8px;
+}
+
+/* Tooltip polyfill for hosts without native title popups (e.g., JetBrains JCEF)
+   Only active when the root has the 'tip-polyfill' class to avoid doubling */
+.tip-polyfill [data-tip] {
+    position: relative;
+    overflow: visible; /* ensure pseudo-element can render outside in JCEF */
+}
+.tip-polyfill [data-tip]::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 10000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .1s ease 0s, visibility 0s linear 0s; /* no delay when hiding */
+}
+.tip-polyfill [data-tip]:hover::after {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity .1s ease 1s, visibility 0s linear 1s; /* 1s delay to mimic native tooltip */
+}
+/* Tooltip arrow removed */
+
+/* Icon-only buttons */
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+.icon-btn:hover { background: transparent; }
+.icon-btn.danger {
+    color: #e74c3c;
+}
+.icon-btn.danger:hover { background: transparent; }
+.icon-btn.danger svg {
+    color: #e74c3c;
+}
+.icon-btn svg {
+    width: 18px;
+    height: 18px;
+    display: block;
+}
+
+/* Topbar icon visual style (neutral grey strokes, no outlines) */
+#topbar .icon-btn {
+    color: #6b7280; /* grey-500 */
+    outline: none;
+    box-shadow: none;
+}
+#topbar .icon-btn:hover {
+    color: #374151; /* grey-700 */
+}
+#topbar .icon-btn:focus,
+#topbar .icon-btn:focus-visible {
+    outline: none;
+    box-shadow: none;
+}
+/* Toggle icons switch based on aria-expanded */
+.icon-btn .icon-when-expanded { display: inline; }
+.icon-btn .icon-when-collapsed { display: none; }
+.icon-btn[aria-expanded="false"] .icon-when-expanded { display: none; }
+.icon-btn[aria-expanded="false"] .icon-when-collapsed { display: inline; }
+
+/* Toasts */
+.toast {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font: 12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    opacity: 1;
+    transition: opacity .3s ease;
+    z-index: 10;
+}
+
+.toast.hide {
+    opacity: 0;
+}
+
+/* Vertical separator in topbar */
+#topbar .separator {
+    flex: 0 0 1px;
+    align-self: stretch; /* override align-items: center */
+    width: 1px; /* ensure consistent width */
+    background: #e5e7eb; /* gray-200 */
+    margin: 0 6px;
+}
