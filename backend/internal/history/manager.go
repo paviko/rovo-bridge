@@ -105,7 +105,6 @@ func (h *HistoryManager) LoadHistory() ([]PromptHistoryEntry, error) {
 		log.Printf("Filtered out %d invalid entries from history file", invalidCount)
 	}
 
-	log.Printf("Successfully loaded %d prompt history entries from %s", len(validEntries), h.filePath)
 	return validEntries, nil
 }
 
@@ -213,7 +212,6 @@ func (h *HistoryManager) savePromptEntry(entry PromptHistoryEntry) error {
 		}
 	}
 
-	log.Printf("Successfully saved prompt to history: %s (total entries: %d)", entry.ID, len(existingEntries))
 	return nil
 }
 
@@ -252,7 +250,6 @@ func (h *HistoryManager) RemovePrompt(id string) error {
 	for _, entry := range existingEntries {
 		if entry.ID == id {
 			found = true
-			log.Printf("Found prompt to remove: %s", id)
 		} else {
 			updatedEntries = append(updatedEntries, entry)
 		}
@@ -274,7 +271,6 @@ func (h *HistoryManager) RemovePrompt(id string) error {
 		return fmt.Errorf("failed to save history after removal: %w", err)
 	}
 
-	log.Printf("Successfully removed prompt %s from history (remaining entries: %d)", id, len(updatedEntries))
 	return nil
 }
 
@@ -373,10 +369,8 @@ func (h *HistoryManager) writeHistoryFile(historyFile HistoryFile) error {
 	}
 
 	// Verify final file
-	if stat, err := os.Stat(h.filePath); err != nil {
+	if _, err := os.Stat(h.filePath); err != nil {
 		log.Printf("Warning: failed to verify final history file after write: %v", err)
-	} else {
-		log.Printf("History file successfully written: %s (%d bytes)", h.filePath, stat.Size())
 	}
 
 	return nil

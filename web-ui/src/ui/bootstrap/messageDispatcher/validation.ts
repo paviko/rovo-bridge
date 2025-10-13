@@ -212,6 +212,16 @@ function validateMessageType(ctx: ValidationCtx, message: any): ValidationResult
       }
       break;
 
+    case 'updateUseClipboard':
+      if (typeof message.useClipboard !== 'boolean') {
+        return {
+          isValid: false,
+          error: MessageError.INVALID_DATA_TYPE,
+          details: 'updateUseClipboard message must have a boolean useClipboard field'
+        };
+      }
+      break;
+
     default:
       // Unknown message types are allowed but logged in IDE mode
       if (!ctx.isStandalone) {

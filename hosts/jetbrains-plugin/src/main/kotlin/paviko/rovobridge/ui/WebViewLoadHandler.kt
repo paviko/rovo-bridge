@@ -103,6 +103,20 @@ object WebViewLoadHandler {
                                 logger.warn("Skipped sending initial font size: invalid value $fs")
                             }
                         } catch (_: Throwable) {}
+
+                        // Inject initial useClipboard via postMessage after page load to ensure handler is ready
+                        try {
+                            val useClipboard = settings.state.useClipboard
+                            val ucMessageObj = mapOf(
+                                "type" to "updateUseClipboard",
+                                "useClipboard" to useClipboard,
+                                "timestamp" to System.currentTimeMillis()
+                            )
+                            val ucMessageJson = mapper.writeValueAsString(ucMessageObj)
+                            val ucScript = "(function(){ try { window.postMessage($ucMessageJson, '*'); } catch(e){ console.error('useClipboard message error:', e); }; })();"
+                            b?.executeJavaScript(ucScript, b.url, 0)
+                            logger.info("Initial useClipboard message sent to frontend: $useClipboard, script: $ucScript")
+                        } catch (_: Throwable) {}
                     }
                 } catch (_: Throwable) { }
             }

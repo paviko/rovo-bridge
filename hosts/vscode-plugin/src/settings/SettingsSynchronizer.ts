@@ -105,6 +105,10 @@ export class SettingsSynchronizer {
                 this.syncUiMode(settings.uiMode);
             }
 
+            if (event.affectsConfiguration('rovobridge.useClipboard')) {
+                this.syncUseClipboard(settings.useClipboard);
+            }
+
             logger.appendLine('Configuration changes synchronized to webview');
 
         } catch (error) {
@@ -186,6 +190,24 @@ export class SettingsSynchronizer {
     }
 
     /**
+     * Synchronize useClipboard changes to webview using unified messaging
+     * @param useClipboard New useClipboard value
+     */
+    private syncUseClipboard(useClipboard: boolean): void {
+        if (!this.communicationBridge) {
+            logger.appendLine('No communication bridge available to sync useClipboard');
+            return;
+        }
+
+        try {
+            this.communicationBridge.updateUseClipboard(useClipboard);
+            logger.appendLine(`UseClipboard synchronized: ${useClipboard}`);
+        } catch (error) {
+            logger.appendLine(`Failed to sync useClipboard: ${error}`);
+        }
+    }
+
+    /**
      * Synchronize UI mode changes to webview
      * Note: UI mode changes may require webview reload for full effect
      * @param uiMode New UI mode value
@@ -213,8 +235,6 @@ export class SettingsSynchronizer {
         }
     }
 
-
-
     /**
      * Manually trigger synchronization of all settings
      * Useful for initial setup or forced refresh
@@ -234,6 +254,7 @@ export class SettingsSynchronizer {
             this.syncChipsCollapsed(settings.chipsCollapsed);
             this.syncComposerCollapsed(settings.composerCollapsed);
             this.syncUiMode(settings.uiMode);
+            this.syncUseClipboard(settings.useClipboard);
 
             logger.appendLine('All settings synchronized using unified messaging');
 

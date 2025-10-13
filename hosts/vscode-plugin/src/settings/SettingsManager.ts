@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import {errorHandler} from '../utils/ErrorHandler';
-
 /**
  * Settings management - mirrors RovoBridgeSettings.kt and RovoBridgeConfigurable.kt
  * Handles VSCode configuration integration and real-time synchronization
@@ -12,6 +11,7 @@ export interface RovoBridgeSettings {
     fontSize: number;
     chipsCollapsed: boolean;
     composerCollapsed: boolean;
+    useClipboard: boolean;
 }
 
 /**
@@ -22,7 +22,8 @@ const DEFAULT_SETTINGS: RovoBridgeSettings = {
     uiMode: 'Terminal',
     fontSize: 14, // VSCode default is 14, JetBrains was 12
     chipsCollapsed: false,
-    composerCollapsed: false
+    composerCollapsed: false,
+    useClipboard: true
 };
 
 export class SettingsManager {
@@ -44,6 +45,7 @@ export class SettingsManager {
             const fontSize = config.get<number>('fontSize', DEFAULT_SETTINGS.fontSize);
             const chipsCollapsed = config.get<boolean>('chipsCollapsed', DEFAULT_SETTINGS.chipsCollapsed);
             const composerCollapsed = config.get<boolean>('composerCollapsed', DEFAULT_SETTINGS.composerCollapsed);
+            const useClipboard = config.get<boolean>('useClipboard', DEFAULT_SETTINGS.useClipboard);
             
             // Validate and sanitize values
             const validatedSettings: RovoBridgeSettings = {
@@ -51,7 +53,8 @@ export class SettingsManager {
                 uiMode: (uiMode === 'Terminal' || uiMode === 'Canvas') ? uiMode : DEFAULT_SETTINGS.uiMode,
                 fontSize: (typeof fontSize === 'number' && fontSize >= 8 && fontSize <= 72) ? fontSize : DEFAULT_SETTINGS.fontSize,
                 chipsCollapsed: typeof chipsCollapsed === 'boolean' ? chipsCollapsed : DEFAULT_SETTINGS.chipsCollapsed,
-                composerCollapsed: typeof composerCollapsed === 'boolean' ? composerCollapsed : DEFAULT_SETTINGS.composerCollapsed
+                composerCollapsed: typeof composerCollapsed === 'boolean' ? composerCollapsed : DEFAULT_SETTINGS.composerCollapsed,
+                useClipboard: typeof useClipboard === 'boolean' ? useClipboard : DEFAULT_SETTINGS.useClipboard
             };
             
             return validatedSettings;
@@ -186,6 +189,7 @@ export class SettingsManager {
             
             case 'chipsCollapsed':
             case 'composerCollapsed':
+            case 'useClipboard':
                 return typeof value === 'boolean' ? value : DEFAULT_SETTINGS[key];
             
             default:

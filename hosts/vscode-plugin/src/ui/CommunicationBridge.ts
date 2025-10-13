@@ -25,13 +25,13 @@ export class CommunicationBridge implements PluginCommunicator {
     private webview?: vscode.Webview;
     private context?: vscode.ExtensionContext;
     private onStateChange?: (key: string, value: any) => Promise<void>;
-        private messageHandlerDisposable?: vscode.Disposable;
+    private messageHandlerDisposable?: vscode.Disposable;
 
     constructor(options: CommunicationBridgeOptions = {}) {
         this.webview = options.webview;
         this.context = options.context;
         this.onStateChange = options.onStateChange;
-        
+
         if (this.webview) {
             this.setupMessageHandlers();
         }
@@ -48,7 +48,7 @@ export class CommunicationBridge implements PluginCommunicator {
         }
 
         this.webview = webview;
-        
+
         if (webview) {
             this.setupMessageHandlers();
             logger.appendLine('Webview set and message handlers configured');
@@ -94,16 +94,16 @@ export class CommunicationBridge implements PluginCommunicator {
 
             // Send message using webview.postMessage
             this.webview.postMessage(messageWithMetadata);
-            
+
             //logger.appendLine(`Sent unified message: ${message.type}`);
             //console.log(`[CommunicationBridge] Sent message: ${message.type}`, messageWithMetadata);
 
         } catch (error) {
             logger.appendLine(`Error sending unified message: ${error}`);
-            
+
             errorHandler.handleCommunicationError(
                 error instanceof Error ? error : new Error(String(error)),
-                { operation: 'sendMessage', messageType: message.type }
+                {operation: 'sendMessage', messageType: message.type}
             );
         }
     }
@@ -122,7 +122,7 @@ export class CommunicationBridge implements PluginCommunicator {
 
             // Validate and normalize paths
             const validPaths = this.validatePaths(paths);
-            
+
             if (validPaths.length === 0) {
                 logger.appendLine('No valid paths to insert after validation');
                 vscode.window.showWarningMessage('RovoBridge: No valid paths to insert');
@@ -134,15 +134,15 @@ export class CommunicationBridge implements PluginCommunicator {
                 type: 'insertPaths',
                 paths: validPaths
             });
-            
+
             logger.appendLine(`Inserted ${validPaths.length} paths: ${validPaths.join(', ')}`);
 
         } catch (error) {
             logger.appendLine(`Error inserting paths: ${error}`);
-            
+
             errorHandler.handleCommunicationError(
                 error instanceof Error ? error : new Error(String(error)),
-                { operation: 'insertPaths', paths, pathCount: paths?.length }
+                {operation: 'insertPaths', paths, pathCount: paths?.length}
             );
         }
     }
@@ -172,15 +172,15 @@ export class CommunicationBridge implements PluginCommunicator {
                 type: 'pastePath',
                 path: normalizedPath
             });
-            
+
             logger.appendLine(`Pasted path: ${normalizedPath}`);
 
         } catch (error) {
             logger.appendLine(`Error pasting path: ${error}`);
-            
+
             errorHandler.handleCommunicationError(
                 error instanceof Error ? error : new Error(String(error)),
-                { operation: 'pastePath', path }
+                {operation: 'pastePath', path}
             );
         }
     }
@@ -202,7 +202,7 @@ export class CommunicationBridge implements PluginCommunicator {
                 type: 'setFontSize',
                 size: Math.floor(size) // Ensure integer
             });
-            
+
             logger.appendLine(`Set font size to: ${size}`);
 
         } catch (error) {
@@ -222,11 +222,31 @@ export class CommunicationBridge implements PluginCommunicator {
                 type: 'updateSessionCommand',
                 command: command || ''
             });
-            
+
             logger.appendLine(`Updated session command: ${command}`);
 
         } catch (error) {
             logger.appendLine(`Error updating session command: ${error}`);
+        }
+    }
+
+    /**
+     * Update useClipboard setting in the web UI
+     * Mirrors UseClipboardSynchronizer.kt functionality
+     * @param useClipboard Whether to use clipboard for sending prompts
+     */
+    updateUseClipboard(useClipboard: boolean): void {
+        try {
+            // Send unified message
+            this.sendMessage({
+                type: 'updateUseClipboard',
+                useClipboard: useClipboard
+            });
+
+            logger.appendLine(`Updated useClipboard: ${useClipboard}`);
+
+        } catch (error) {
+            logger.appendLine(`Error updating useClipboard: ${error}`);
         }
     }
 
@@ -251,7 +271,7 @@ export class CommunicationBridge implements PluginCommunicator {
                 openedFiles: validFiles,
                 currentFile: current || null
             });
-            
+
             //logger.appendLine(`Updated opened files: ${validFiles.length} files, current: ${current || 'none'}`);
 
         } catch (error) {
@@ -275,7 +295,7 @@ export class CommunicationBridge implements PluginCommunicator {
                 chipsCollapsed: state.chipsCollapsed,
                 composerCollapsed: state.composerCollapsed
             });
-            
+
             logger.appendLine(`Updated UI state: ${JSON.stringify(state)}`);
 
         } catch (error) {
@@ -288,7 +308,7 @@ export class CommunicationBridge implements PluginCommunicator {
      * @param collapsed Whether chips should be collapsed
      */
     setChipsCollapsed(collapsed: boolean): void {
-        this.updateUIState({ chipsCollapsed: collapsed });
+        this.updateUIState({chipsCollapsed: collapsed});
     }
 
     /**
@@ -296,7 +316,7 @@ export class CommunicationBridge implements PluginCommunicator {
      * @param collapsed Whether composer should be collapsed
      */
     setComposerCollapsed(collapsed: boolean): void {
-        this.updateUIState({ composerCollapsed: collapsed });
+        this.updateUIState({composerCollapsed: collapsed});
     }
 
     /**
@@ -310,7 +330,7 @@ export class CommunicationBridge implements PluginCommunicator {
                 type: 'setToken',
                 token: token
             });
-            
+
             logger.appendLine('Authentication token set');
 
         } catch (error) {
@@ -326,23 +346,27 @@ export class CommunicationBridge implements PluginCommunicator {
      * @param chipsCollapsed Initial chips collapsed state
      * @param composerCollapsed Initial composer collapsed state
      * @param customCommand Initial session command
+     * @param useClipboard Whether to use clipboard for sending prompts
      */
     initializeWebUI(
         token: string,
         fontSize: number = 14,
         chipsCollapsed: boolean = false,
         composerCollapsed: boolean = false,
-        customCommand?: string
+        customCommand?: string,
+        useClipboard: boolean = true
     ): void {
         try {
             // Use unified messaging for initialization
             this.setToken(token);
             this.setFontSize(fontSize);
-            this.updateUIState({ chipsCollapsed, composerCollapsed });
-            
+            this.updateUIState({chipsCollapsed, composerCollapsed});
+
             if (customCommand && customCommand.trim()) {
                 this.updateSessionCommand(customCommand);
             }
+
+            this.updateUseClipboard(useClipboard);
 
             logger.appendLine('Web UI initialized with unified messaging');
 
@@ -404,7 +428,7 @@ export class CommunicationBridge implements PluginCommunicator {
                 // Open with specific line/column position
                 const line = Math.max(0, startLine); // Convert to 0-based indexing
                 const column = 0;
-                
+
                 const options: vscode.TextDocumentShowOptions = {
                     selection: new vscode.Range(line, column, line, column),
                     viewColumn: vscode.ViewColumn.Active
@@ -413,7 +437,7 @@ export class CommunicationBridge implements PluginCommunicator {
                 try {
                     const document = await vscode.workspace.openTextDocument(fileUri);
                     const editor = await vscode.window.showTextDocument(document, options);
-                    
+
                     // Scroll to center the line
                     editor.revealRange(
                         new vscode.Range(line, column, line, column),
@@ -435,10 +459,10 @@ export class CommunicationBridge implements PluginCommunicator {
 
         } catch (error) {
             logger.appendLine(`Error opening file: ${error}`);
-            
+
             await errorHandler.handleFileOperationError(
                 error instanceof Error ? error : new Error(String(error)),
-                { operation: 'openFile', filePath: path, hasLineNumbers: !!path.match(/:(\d+)(?:-(\d+))?$/) }
+                {operation: 'openFile', filePath: path, hasLineNumbers: !!path.match(/:(\d+)(?:-(\d+))?$/)}
             );
         }
     }
@@ -460,7 +484,7 @@ export class CommunicationBridge implements PluginCommunicator {
 
             // Fallback to direct configuration update
             const config = vscode.workspace.getConfiguration('rovobridge');
-            
+
             switch (key) {
                 case 'fontSize':
                     if (typeof value === 'number' && value >= 8 && value <= 72) {
@@ -495,6 +519,15 @@ export class CommunicationBridge implements PluginCommunicator {
                         logger.appendLine(`Custom command updated to: ${value}`);
                     } else {
                         logger.appendLine(`Invalid customCommand value: ${value}`);
+                    }
+                    break;
+
+                case 'useClipboard':
+                    if (typeof value === 'boolean') {
+                        await config.update('useClipboard', value, vscode.ConfigurationTarget.Global);
+                        logger.appendLine(`UseClipboard updated to: ${value}`);
+                    } else {
+                        logger.appendLine(`Invalid useClipboard value: ${value}`);
                     }
                     break;
 
@@ -641,7 +674,6 @@ export class CommunicationBridge implements PluginCommunicator {
     // Private utility methods
 
 
-
     /**
      * Validate file paths before sending to web UI
      * @param paths Array of paths to validate
@@ -698,7 +730,8 @@ export class CommunicationBridge implements PluginCommunicator {
             // Normalize path separators
             normalizedPath = path.normalize(normalizedPath);
 
-            return normalizedPath;
+            // Convert to POSIX style for webview and testing consistency
+            return normalizedPath.split(path.sep).join('/');
 
         } catch (error) {
             logger.appendLine(`Error normalizing path ${rawPath}: ${error}`);
@@ -714,11 +747,11 @@ export class CommunicationBridge implements PluginCommunicator {
             this.messageHandlerDisposable.dispose();
             this.messageHandlerDisposable = undefined;
         }
-        
+
         this.webview = undefined;
         this.context = undefined;
         this.onStateChange = undefined;
-        
+
         logger.appendLine('CommunicationBridge disposed');
     }
 }

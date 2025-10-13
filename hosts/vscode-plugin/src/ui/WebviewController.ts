@@ -228,13 +228,15 @@ export class WebviewController {
       const chipsCollapsed = config.get<boolean>('chipsCollapsed', false);
       const composerCollapsed = config.get<boolean>('composerCollapsed', false);
       const customCommand = config.get<string>('customCommand', '');
+      const useClipboard = config.get<boolean>('useClipboard', true);
 
       this.communicationBridge.initializeWebUI(
         this.connection.token,
         fontSize,
         chipsCollapsed,
         composerCollapsed,
-        customCommand || undefined
+        customCommand || undefined,
+        useClipboard
       );
     } catch (e) {
       logger.appendLine(`initializeWebUI failed: ${e}`);

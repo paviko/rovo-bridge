@@ -52,12 +52,16 @@ type sessionState struct {
 
 	// stdout throttling/buffering
 	outBuf        []byte
-	lastSend      time.Time
+	lastSend      time.Time // last time we sent a stdout message to client
+	lastEnqueue   time.Time // last time we enqueued data from PTY into outBuf
 	throttleTimer *time.Timer
 	needImmediate bool
 
 	// session working directory for prompt history
 	workingDir string
+
+	// whether to use system clipboard when injecting files (default: true)
+	useClipboard bool
 }
 
 func NewRouter(customCommand string) *Router {
@@ -213,6 +217,12 @@ func (r *Router) handle(conn *websocket.Conn, m map[string]any) error {
 		r.mu.Unlock()
 		if resumeReq && existing != nil {
 			// Attach to existing session
+			// If caller provided useClipboard, update stored preference
+			if v, ok := m["useClipboard"].(bool); ok {
+				st.mu.Lock()
+				st.useClipboard = v
+				st.mu.Unlock()
+			}
 			st.mu.Lock()
 			st.currentConn = conn
 			if st.orphanTimer != nil {
@@ -285,6 +295,8 @@ func (r *Router) handle(conn *websocket.Conn, m map[string]any) error {
 		ctx, cancel := context.WithCancel(context.Background())
 		sess, err := session.Start(ctx, session.Config{Cmd: cmd, Args: args, Env: env, Dir: dir, Mode: mode})
 		if err != nil {
+			// Ensure we do not leak context when start fails
+			cancel()
 			Errorf(conn, "failed to start: %v", err)
 			return nil
 		}
@@ -314,6 +326,12 @@ func (r *Router) handle(conn *websocket.Conn, m map[string]any) error {
 		r.mu.Unlock()
 		// initialize/attach state
 		st.mu.Lock()
+		// Persist caller-provided useClipboard if present, default true otherwise
+		if v, ok := m["useClipboard"].(bool); ok {
+			st.useClipboard = v
+		} else {
+			st.useClipboard = true
+		}
 		st.replay = nil
 		st.lastSeq = 0
 		st.currentConn = conn
@@ -474,12 +492,13 @@ func (r *Router) handle(conn *websocket.Conn, m map[string]any) error {
 			_ = sess.Resize(cols, rows)
 		}
 	case "injectFiles":
-		// More efficient: directly inject file contents to stdin without roundtrip
+		// Inject file contents either directly or via clipboard+paste depending on session preference
 		sid, _ := m["sessionId"].(string)
 		paths, _ := anyToStrings(m["paths"])
 
 		r.mu.Lock()
 		sess := r.sessions[sid]
+		st := r.sessionStates[sid]
 		r.mu.Unlock()
 
 		if sess == nil {
@@ -487,46 +506,85 @@ func (r *Router) handle(conn *websocket.Conn, m map[string]any) error {
 			return nil
 		}
 
-		// Read and inject file contents directly
+		// Read file contents once
 		contents := fileutil.ReadMultipleFiles(paths)
-		// Build once, then write once via buffered writer to minimize syscalls and avoid interleaving
 		var b strings.Builder
 		for _, content := range contents {
 			if content == "" {
 				continue
 			}
-			// Process content: normalize newlines and escape them
+			b.WriteString(content)
+			if !strings.HasSuffix(content, " ") {
+				b.WriteString(" ")
+			}
+		}
+		payload := b.String()
+		if payload == "" {
+			return nil
+		}
+
+		// If useClipboard is enabled for this session, perform clipboard-based paste.
+		useClipboard := false
+		if st != nil {
+			st.mu.Lock()
+			useClipboard = st.useClipboard
+			st.mu.Unlock()
+		}
+		if useClipboard {
+			// 1) backup clipboard, 2) set payload exact as-is, 3) send Ctrl+V, 4) restore clipboard after terminal becomes idle (~1s)
+			prev, prevErr := getClipboard()
+			if err := setClipboard(payload); err == nil {
+				// send Ctrl+V (0x16)
+				r.waitStdoutIdle(sid, 2*stdoutThrottleInterval)
+				_, _ = sess.Stdin().Write([]byte{0x16})
+				// Restore previous clipboard content after terminal output becomes idle
+				r.waitStdoutIdle(sid, 1*time.Second)
+				if prevErr == nil {
+					_ = setClipboard(prev)
+				}
+				return nil
+			}
+			// If setting clipboard failed, fall through to direct injection as a robust fallback
+		}
+
+		// Fallback: direct injection with normalized and escaped newlines (legacy behavior)
+		var b2 strings.Builder
+		for _, content := range contents {
+			if content == "" {
+				continue
+			}
 			processed := strings.ReplaceAll(content, "\r\n", "\n")
 			processed = strings.ReplaceAll(processed, "\r", "\n")
 			processed = strings.ReplaceAll(processed, "\n", "\\\n")
 			if processed != "" && !strings.HasSuffix(processed, " ") {
 				processed += " "
 			}
-			b.WriteString(processed)
+			b2.WriteString(processed)
 		}
-		payload := b.String()
-		if payload != "" {
-			w := bufio.NewWriterSize(sess.Stdin(), 64*1024)
-			_, _ = io.WriteString(w, payload)
-			_ = w.Flush()
-			// Hint stdout pipeline to flush promptly after large injection
-			r.mu.Lock()
-			st := r.sessionStates[sid]
-			r.mu.Unlock()
-			if st != nil {
-				st.mu.Lock()
-				if len(st.outBuf) > 0 && st.currentConn != nil {
-					st.needImmediate = false
-					if st.throttleTimer != nil {
-						st.throttleTimer.Stop()
-						st.throttleTimer = nil
-					}
-					st.mu.Unlock()
-					r.flushStdout(sid)
-				} else {
-					st.needImmediate = true
-					st.mu.Unlock()
+		payload2 := b2.String()
+		if payload2 == "" {
+			return nil
+		}
+		w := bufio.NewWriterSize(sess.Stdin(), 64*1024)
+		_, _ = io.WriteString(w, payload2)
+		_ = w.Flush()
+		// Hint stdout pipeline to flush promptly after large injection
+		r.mu.Lock()
+		st = r.sessionStates[sid]
+		r.mu.Unlock()
+		if st != nil {
+			st.mu.Lock()
+			if len(st.outBuf) > 0 && st.currentConn != nil {
+				st.needImmediate = false
+				if st.throttleTimer != nil {
+					st.throttleTimer.Stop()
+					st.throttleTimer = nil
 				}
+				st.mu.Unlock()
+				r.flushStdout(sid)
+			} else {
+				st.needImmediate = true
+				st.mu.Unlock()
 			}
 		}
 	case "snapshot":
@@ -552,6 +610,39 @@ func (r *Router) handle(conn *websocket.Conn, m map[string]any) error {
 			// Store the font size change
 			r.mu.Lock()
 			r.currentFontSize = fontSize
+			r.mu.Unlock()
+		}
+	case "updateUseClipboard":
+		// Frontend notifies that useClipboard setting has changed
+		useClipboard, ok := m["useClipboard"].(bool)
+		if !ok {
+			log.Printf("Invalid useClipboard value in updateUseClipboard message")
+			return nil
+		}
+
+		// If sessionId is provided, update that specific session
+		if sid, hasSid := m["sessionId"].(string); hasSid && sid != "" {
+			r.mu.Lock()
+			st := r.sessionStates[sid]
+			r.mu.Unlock()
+
+			if st != nil {
+				st.mu.Lock()
+				st.useClipboard = useClipboard
+				st.mu.Unlock()
+			} else {
+				log.Printf("Warning: received updateUseClipboard for unknown session %s", sid)
+			}
+		} else {
+			// No sessionId provided - update all active sessions
+			r.mu.Lock()
+			for _, st := range r.sessionStates {
+				if st != nil {
+					st.mu.Lock()
+					st.useClipboard = useClipboard
+					st.mu.Unlock()
+				}
+			}
 			r.mu.Unlock()
 		}
 	case "savePrompt":
@@ -609,6 +700,185 @@ func (r *Router) handle(conn *websocket.Conn, m map[string]any) error {
 			"type":     "promptRemoved",
 			"promptId": promptId,
 		})
+	case "send":
+		// Combined send message that handles text, history, and file injection in one go
+		// Behaves like 'injectFiles' for file handling (respects useClipboard) and like 'stdin' for history
+		sid, _ := m["sessionId"].(string)
+		dataB64, _ := m["dataBase64"].(string)
+		paths, _ := anyToStrings(m["paths"])
+
+		// Decode text data
+		var textData []byte
+		var err error
+		if dataB64 != "" {
+			textData, err = base64.StdEncoding.DecodeString(dataB64)
+			if err != nil {
+				Errorf(conn, "bad base64 in send message")
+				return nil
+			}
+		}
+
+		r.mu.Lock()
+		sess := r.sessions[sid]
+		st := r.sessionStates[sid]
+		r.mu.Unlock()
+
+		// Save history entry first (non-blocking), even if there's no active session
+		if historyData, ok := m["historyEntry"].(map[string]any); ok {
+			// Extract history entry fields
+			id, _ := historyData["id"].(string)
+			serializedContent, _ := historyData["serializedContent"].(string)
+
+			// Determine projectCwd using session state if available
+			var projectCwd string
+			if st != nil {
+				st.mu.Lock()
+				projectCwd = st.workingDir
+				st.mu.Unlock()
+			}
+			if projectCwd == "" {
+				// Fallback to current process working directory
+				if cwd, err := os.Getwd(); err == nil {
+					projectCwd = cwd
+				}
+			}
+
+			// Save prompt to history with frontend-provided ID (async to avoid blocking)
+			go func() {
+				if err := r.historyManager.SavePromptWithID(id, serializedContent, projectCwd); err != nil {
+					log.Printf("Failed to save prompt to history (non-blocking): %v", err)
+				}
+			}()
+		}
+
+		// If there's no active session, we still saved the history above.
+		if sess == nil {
+			Errorf(conn, "no session")
+			return nil
+		}
+
+		// Build combined payload: text + file contents
+		var combinedPayload strings.Builder
+
+		// Add text data first if present
+		if len(textData) > 0 {
+			combinedPayload.Write(textData)
+		}
+
+		// Add file contents if paths provided
+		if len(paths) > 0 {
+			contents := fileutil.ReadMultipleFiles(paths)
+			for _, content := range contents {
+				if content == "" {
+					continue
+				}
+				combinedPayload.WriteString(content)
+				if !strings.HasSuffix(content, " ") {
+					combinedPayload.WriteString(" ")
+				}
+			}
+		}
+
+		finalPayload := combinedPayload.String()
+		if finalPayload == "" {
+			return nil
+		}
+
+		// If useClipboard is enabled for this session, perform clipboard-based paste (like injectFiles).
+		useClipboard := false
+		if st != nil {
+			st.mu.Lock()
+			useClipboard = st.useClipboard
+			st.mu.Unlock()
+		}
+		if useClipboard {
+			// 1) backup clipboard, 2) set payload exact as-is, 3) send Ctrl+V, 4) restore clipboard after terminal becomes idle (~1s)
+			prev, prevErr := getClipboard()
+			if err := setClipboard(finalPayload); err == nil {
+				// send Ctrl+V (0x16)
+				r.waitStdoutIdle(sid, 2*stdoutThrottleInterval)
+				_, _ = sess.Stdin().Write([]byte{0x16})
+				// Restore previous clipboard content after terminal output becomes idle
+				r.waitStdoutIdle(sid, 1*time.Second)
+				if prevErr == nil {
+					_ = setClipboard(prev)
+				}
+
+				// Mark that the next stdout should be sent immediately.
+				if st != nil {
+					st.mu.Lock()
+					if len(st.outBuf) > 0 && st.currentConn != nil {
+						st.needImmediate = false
+						if st.throttleTimer != nil {
+							st.throttleTimer.Stop()
+							st.throttleTimer = nil
+						}
+						st.mu.Unlock()
+						r.flushStdout(sid)
+					} else {
+						st.needImmediate = true
+						st.mu.Unlock()
+					}
+				}
+				return nil
+			}
+			// If setting clipboard failed, fall through to direct injection as a robust fallback
+		}
+
+		// Fallback: direct injection with normalized and escaped newlines (like injectFiles)
+		var processedPayload strings.Builder
+
+		// Process text data if present
+		if len(textData) > 0 {
+			textStr := string(textData)
+			processed := strings.ReplaceAll(textStr, "\r\n", "\n")
+			processed = strings.ReplaceAll(processed, "\r", "\n")
+			processed = strings.ReplaceAll(processed, "\n", "\\\n")
+			processedPayload.WriteString(processed)
+		}
+
+		// Process file contents if present
+		if len(paths) > 0 {
+			contents := fileutil.ReadMultipleFiles(paths)
+			for _, content := range contents {
+				if content == "" {
+					continue
+				}
+				processed := strings.ReplaceAll(content, "\r\n", "\n")
+				processed = strings.ReplaceAll(processed, "\r", "\n")
+				processed = strings.ReplaceAll(processed, "\n", "\\\n")
+				if processed != "" && !strings.HasSuffix(processed, " ") {
+					processed += " "
+				}
+				processedPayload.WriteString(processed)
+			}
+		}
+
+		finalProcessedPayload := processedPayload.String()
+		if finalProcessedPayload == "" {
+			return nil
+		}
+
+		w := bufio.NewWriterSize(sess.Stdin(), 64*1024)
+		_, _ = io.WriteString(w, finalProcessedPayload)
+		_ = w.Flush()
+
+		// Mark that the next stdout should be sent immediately.
+		if st != nil {
+			st.mu.Lock()
+			if len(st.outBuf) > 0 && st.currentConn != nil {
+				st.needImmediate = false
+				if st.throttleTimer != nil {
+					st.throttleTimer.Stop()
+					st.throttleTimer = nil
+				}
+				st.mu.Unlock()
+				r.flushStdout(sid)
+			} else {
+				st.needImmediate = true
+				st.mu.Unlock()
+			}
+		}
 	}
 	return nil
 }
@@ -633,6 +903,7 @@ func (r *Router) pipeStdout(sid string, sess *session.Session) {
 				}
 				// Accumulate into throttled buffer
 				st.outBuf = append(st.outBuf, buf[:n]...)
+				st.lastEnqueue = time.Now()
 				// Decide whether to flush now or schedule
 				c := st.currentConn
 				if c != nil {
@@ -693,7 +964,6 @@ func (r *Router) flushStdout(sid string) {
 	// Advance sequence only when we actually send
 	st.lastSeq++
 	seq := st.lastSeq
-	st.lastSend = time.Now()
 	st.needImmediate = false
 	if st.throttleTimer != nil {
 		st.throttleTimer.Stop()
@@ -704,6 +974,80 @@ func (r *Router) flushStdout(sid string) {
 		"type": "stdout", "sessionId": sid, "dataBase64": base64.StdEncoding.EncodeToString(data), "seq": seq,
 	}); err != nil {
 		log.Printf("ws write error: %v", err)
+	}
+	// Record lastSend after the write completes to better reflect delivery timing
+	r.mu.Lock()
+	st = r.sessionStates[sid]
+	r.mu.Unlock()
+	if st != nil {
+		st.mu.Lock()
+		st.lastSend = time.Now()
+		st.mu.Unlock()
+	}
+}
+
+// waitStdoutIdle waits until stdout for the given session has been fully flushed
+// and no data has been sent for at least the specified idle period.
+// It returns early after a safety timeout to avoid indefinite blocking if the
+// session is closed or no stdout activity occurs.
+func (r *Router) waitStdoutIdle(sid string, idle time.Duration) {
+	// Safety cap: don't block forever
+	maxWait := 60 * time.Second
+	deadline := time.Now().Add(maxWait)
+	start := time.Now()
+	//log.Printf("waitStdoutIdle: start sid=%s idle=%s", sid, idle)
+	for {
+		r.mu.Lock()
+		st := r.sessionStates[sid]
+		r.mu.Unlock()
+		if st == nil {
+			return
+		}
+		st.mu.Lock()
+		outEmpty := len(st.outBuf) == 0
+		lastSend := st.lastSend
+		lastEnqueue := st.lastEnqueue
+		tt := st.throttleTimer
+		st.mu.Unlock()
+
+		now := time.Now()
+		// Determine the most recent activity since we started waiting
+		lastActivity := lastSend
+		if lastEnqueue.After(lastActivity) {
+			lastActivity = lastEnqueue
+		}
+		// If we've seen activity after 'start', require a full idle window AND no pending buffers/flushes
+		if lastActivity.After(start) {
+			if outEmpty && tt == nil && now.Sub(lastActivity) >= idle {
+				//log.Printf("waitStdoutIdle: stop sid=%s reason=idleWindow wait=%s", sid, time.Since(start))
+				return
+			}
+		} else {
+			// No activity yet; do not return immediately just because previous activity was long ago
+			// Wait up to 'idle' as a minimal debounce; after that, we assume nothing will come
+			if now.Sub(start) >= idle {
+				//log.Printf("waitStdoutIdle: stop sid=%s reason=noActivity wait=%s", sid, time.Since(start))
+				return
+			}
+		}
+		if now.After(deadline) {
+			//log.Printf("waitStdoutIdle: stop sid=%s reason=deadline wait=%s", sid, time.Since(start))
+			return
+		}
+		// Sleep a small amount; adapt to remaining idle time if any
+		sleep := 25 * time.Millisecond
+		if lastActivity.After(start) {
+			rem := idle - now.Sub(lastActivity)
+			if rem > 0 && rem < sleep {
+				sleep = rem
+			}
+		} else {
+			rem := idle - now.Sub(start)
+			if rem > 0 && rem < sleep {
+				sleep = rem
+			}
+		}
+		time.Sleep(sleep)
 	}
 }
 

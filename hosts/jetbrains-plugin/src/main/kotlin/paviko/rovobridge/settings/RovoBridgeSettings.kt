@@ -17,7 +17,7 @@ import com.intellij.openapi.diagnostic.Logger
 )
 @Service
 class RovoBridgeSettings : PersistentStateComponent<RovoBridgeSettings.State> {
-    
+
     /**
      * Data class representing the persistent state of RovoBridge settings.
      */
@@ -27,13 +27,13 @@ class RovoBridgeSettings : PersistentStateComponent<RovoBridgeSettings.State> {
          * Empty string means use the default command.
          */
         var customCommand: String = "",
-        
+
         /**
          * UI mode selection: "Terminal" or "Canvas".
          * Default is "Terminal" mode.
          */
         var uiMode: String = "Terminal",
-        
+
         /**
          * Font size for the plugin UI.
          * Valid range is 8-72, default is 12.
@@ -50,12 +50,18 @@ class RovoBridgeSettings : PersistentStateComponent<RovoBridgeSettings.State> {
          * Whether the composer (editor) section is collapsed.
          * Default false => visible/expanded.
          */
-        var composerCollapsed: Boolean = false
+        var composerCollapsed: Boolean = false,
+
+        /**
+         * Whether to use clipboard for sending prompts.
+         * Default true => use clipboard-based paste for file injection.
+         */
+        var useClipboard: Boolean = true
     )
-    
+
     private var state = State()
     private val logger = Logger.getInstance(RovoBridgeSettings::class.java)
-    
+
     override fun getState(): State {
         try {
             return state
@@ -64,7 +70,7 @@ class RovoBridgeSettings : PersistentStateComponent<RovoBridgeSettings.State> {
             return State() // Return default state on error
         }
     }
-    
+
     override fun loadState(state: State) {
         try {
             // Validate loaded state and apply defaults for invalid values
@@ -73,17 +79,18 @@ class RovoBridgeSettings : PersistentStateComponent<RovoBridgeSettings.State> {
                 uiMode = if (state.uiMode == "Terminal" || state.uiMode == "Canvas") state.uiMode else "Terminal",
                 fontSize = if (state.fontSize in 8..72) state.fontSize else 12,
                 chipsCollapsed = state.chipsCollapsed,
-                composerCollapsed = state.composerCollapsed
+                composerCollapsed = state.composerCollapsed,
+                useClipboard = state.useClipboard
             )
-            
+
             this.state = validatedState
-            logger.info("Settings loaded successfully: customCommand='${validatedState.customCommand}', uiMode='${validatedState.uiMode}', fontSize=${validatedState.fontSize}, chipsCollapsed=${validatedState.chipsCollapsed}, composerCollapsed=${validatedState.composerCollapsed}")
+            logger.info("Settings loaded successfully: customCommand='${validatedState.customCommand}', uiMode='${validatedState.uiMode}', fontSize=${validatedState.fontSize}, chipsCollapsed=${validatedState.chipsCollapsed}, composerCollapsed=${validatedState.composerCollapsed}, useClipboard=${validatedState.useClipboard}")
         } catch (e: Exception) {
             logger.error("Failed to load settings state, using defaults", e)
             this.state = State() // Use default state on error
         }
     }
-    
+
     companion object {
         /**
          * Gets the application-level instance of RovoBridgeSettings.

@@ -119,6 +119,9 @@ class ChatToolWindowFactory : ToolWindowFactory, DumbAware {
                                         // Store browser reference for session command updates
                                         SessionCommandSynchronizer.setBrowser(browser)
 
+                                        // Store browser reference for useClipboard updates
+                                        UseClipboardSynchronizer.setBrowser(browser)
+
                                         // Store browser reference for path insertion (context actions)
                                         PathInserter.setBrowser(browser)
 
@@ -136,7 +139,9 @@ class ChatToolWindowFactory : ToolWindowFactory, DumbAware {
                                         // JS bridge for opening files in IDE
                                         val openFileQuery = try {
                                             JBCefJSQuery.create(browser)
-                                        } catch (e: Exception) { null }
+                                        } catch (e: Exception) {
+                                            null
+                                        }
 
                                         // Ensure queries are disposed with the browser to avoid leaks
                                         try {
@@ -185,9 +190,9 @@ class ChatToolWindowFactory : ToolWindowFactory, DumbAware {
                                         // Open file handler via helper
                                         try {
                                             OpenInIdeHandler.install(openFileQuery, project, logger)
-                                        } catch (_: Throwable) { }
+                                        } catch (_: Throwable) {
+                                        }
 
-                                        
 
                                         // Push opened files and current file from IDE into the webview (@ overlay)
                                         try {
@@ -262,7 +267,10 @@ class ChatToolWindowFactory : ToolWindowFactory, DumbAware {
 
                                         // Early attempt: define notify functions only (no observers) before load end
                                         try {
-                                            val earlyNotify = WebViewScripts.defineNotifyFunctionsScript(chipsCollapsedQuery, composerCollapsedQuery)
+                                            val earlyNotify = WebViewScripts.defineNotifyFunctionsScript(
+                                                chipsCollapsedQuery,
+                                                composerCollapsedQuery
+                                            )
                                             browser.cefBrowser.executeJavaScript(earlyNotify, browser.cefBrowser.url, 0)
                                         } catch (_: Throwable) {
                                         }
@@ -270,14 +278,18 @@ class ChatToolWindowFactory : ToolWindowFactory, DumbAware {
                                         try {
                                             val earlyOpen = WebViewScripts.defineOpenFileBridgeScript(openFileQuery)
                                             browser.cefBrowser.executeJavaScript(earlyOpen, browser.cefBrowser.url, 0)
-                                        } catch (_: Throwable) { }
+                                        } catch (_: Throwable) {
+                                        }
 
                                         // Set initial session command from settings
                                         val customCommand = settings.state.customCommand
                                         SessionCommandSynchronizer.updateFrontendSessionCommand(customCommand)
 
                                         // Set up message listener for font size changes from frontend
-                                        FontSizeMonitor.setupFontSizeMessageListener(browser, settings) { connectionInfo }
+                                        FontSizeMonitor.setupFontSizeMessageListener(
+                                            browser,
+                                            settings
+                                        ) { connectionInfo }
 
                                         // Enable dropping files from the IDE onto the web UI via helper
                                         try {
@@ -355,9 +367,10 @@ class ChatToolWindowFactory : ToolWindowFactory, DumbAware {
             // Clear browser references
             FontSizeSynchronizer.clearBrowser()
             SessionCommandSynchronizer.clearBrowser()
+            UseClipboardSynchronizer.clearBrowser()
             PathInserter.clearBrowser()
         }
     }
 
-    
+
 }

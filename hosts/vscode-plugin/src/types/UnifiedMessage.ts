@@ -45,6 +45,11 @@ export interface UpdateUIStateMessage extends BaseMessage {
     composerCollapsed?: boolean;
 }
 
+export interface UpdateUseClipboardMessage extends BaseMessage {
+    type: 'updateUseClipboard';
+    useClipboard: boolean;
+}
+
 export type UnifiedMessage = 
     | SetTokenMessage 
     | SetFontSizeMessage 
@@ -52,7 +57,8 @@ export type UnifiedMessage =
     | PastePathMessage 
     | UpdateSessionCommandMessage 
     | UpdateOpenedFilesMessage
-    | UpdateUIStateMessage;
+    | UpdateUIStateMessage
+    | UpdateUseClipboardMessage;
 
 /**
  * Interface for plugin communication using unified message protocol
@@ -66,4 +72,5 @@ export interface PluginCommunicator {
     updateSessionCommand(command: string): void;
     updateOpenedFiles(files: string[], current?: string): void;
     updateUIState(state: { chipsCollapsed?: boolean; composerCollapsed?: boolean }): void;
+    updateUseClipboard(useClipboard: boolean): void;
 }

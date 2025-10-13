@@ -32,6 +32,8 @@ export function startSession(websocket: WebSocket, resume: boolean = true) {
     args: state.sessionConfig.args,
     pty: state.sessionConfig.pty,
     env: state.sessionConfig.env,
+    // Initialize session with cached host preference if provided
+    useClipboard: (state as any).useClipboardPref,
     resume: !!resume,
     cols, rows,
   }))

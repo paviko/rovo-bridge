@@ -4,6 +4,7 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.options.ConfigurationException
 import com.intellij.openapi.ui.ComboBox
+import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.FormBuilder
@@ -18,47 +19,50 @@ import javax.swing.SpinnerNumberModel
  * Provides a settings panel under Tools > RovoBridge Plug with configurable options.
  */
 class RovoBridgeConfigurable : Configurable {
-    
+
     private var mainPanel: JPanel? = null
     private var customCommandField: JBTextField? = null
     private var uiModeComboBox: ComboBox<String>? = null
     private var fontSizeSpinner: JSpinner? = null
+    private var useClipboardCheckBox: JBCheckBox? = null
     private var commandErrorLabel: JBLabel? = null
     private var fontSizeErrorLabel: JBLabel? = null
-    
+
     private val settings = RovoBridgeSettings.getInstance()
     private val logger = Logger.getInstance(RovoBridgeConfigurable::class.java)
-    
+
     override fun getDisplayName(): String = "RovoBridge Plug"
-    
+
     override fun createComponent(): JComponent? {
         try {
             // Create UI components
             customCommandField = JBTextField(settings.state.customCommand)
-            
+
             uiModeComboBox = ComboBox(arrayOf("Terminal", "Canvas")).apply {
                 selectedItem = settings.state.uiMode
             }
-            
+
             fontSizeSpinner = JSpinner(SpinnerNumberModel(settings.state.fontSize, 8, 72, 1))
-            
+
+            useClipboardCheckBox = JBCheckBox("Use clipboard to send prompts", settings.state.useClipboard)
+
             // Create error labels for validation messages
             commandErrorLabel = JBLabel().apply {
                 foreground = Color.RED
                 isVisible = false
             }
-            
+
             fontSizeErrorLabel = JBLabel().apply {
                 foreground = Color.RED
                 isVisible = false
             }
-            
+
             // Create info label for mode change
             val modeInfoLabel = JBLabel("<html><i>Changing mode requires clicking \"Restart\"</i></html>")
-            
+
             // Add validation listeners
             setupValidationListeners()
-            
+
             // Build the form
             mainPanel = FormBuilder.createFormBuilder()
                 .addLabeledComponent(JBLabel("Command:"), customCommandField!!, 1, false)
@@ -67,9 +71,10 @@ class RovoBridgeConfigurable : Configurable {
                 .addComponent(modeInfoLabel)
                 .addLabeledComponent(JBLabel("Font Size:"), fontSizeSpinner!!, 1, false)
                 .addComponent(fontSizeErrorLabel!!)
+                .addComponent(useClipboardCheckBox!!)
                 .addComponentFillVertically(JPanel(), 0)
                 .panel
-            
+
             return mainPanel
         } catch (e: Exception) {
             logger.error("Failed to create settings UI component", e)
@@ -78,27 +83,29 @@ class RovoBridgeConfigurable : Configurable {
             }
         }
     }
-    
+
     private fun setupValidationListeners() {
         // Font size validation
         fontSizeSpinner?.addChangeListener {
             validateFontSize()
         }
-        
+
         // Command validation (basic check for empty/whitespace)
         customCommandField?.document?.addDocumentListener(object : javax.swing.event.DocumentListener {
             override fun insertUpdate(e: javax.swing.event.DocumentEvent?) {
                 validateCommand()
             }
+
             override fun removeUpdate(e: javax.swing.event.DocumentEvent?) {
                 validateCommand()
             }
+
             override fun changedUpdate(e: javax.swing.event.DocumentEvent?) {
                 validateCommand()
             }
         })
     }
-    
+
     private fun validateFontSize(): Boolean {
         val fontSize = fontSizeSpinner?.value as? Int ?: return false
         return if (fontSize in 8..72) {
@@ -110,7 +117,7 @@ class RovoBridgeConfigurable : Configurable {
             false
         }
     }
-    
+
     private fun validateCommand(): Boolean {
         val command = customCommandField?.text?.trim() ?: ""
         // Command can be empty (uses default), but warn about suspicious patterns
@@ -123,35 +130,36 @@ class RovoBridgeConfigurable : Configurable {
             return true
         }
     }
-    
+
     override fun isModified(): Boolean {
         val currentState = settings.state
-        
+
         return customCommandField?.text != currentState.customCommand ||
-               uiModeComboBox?.selectedItem != currentState.uiMode ||
-               (fontSizeSpinner?.value as? Int) != currentState.fontSize
+                uiModeComboBox?.selectedItem != currentState.uiMode ||
+                (fontSizeSpinner?.value as? Int) != currentState.fontSize ||
+                useClipboardCheckBox?.isSelected != currentState.useClipboard
     }
-    
+
     override fun apply() {
         try {
             // Validate all fields before applying
             if (!validateFontSize()) {
                 throw ConfigurationException("Font size must be between 8 and 72.")
             }
-            
+
             if (!validateCommand()) {
                 throw ConfigurationException("Invalid command configuration.")
             }
-            
+
             val state = settings.state
-            
+
             // Apply custom command
             customCommandField?.text?.let { command ->
                 val oldCommand = state.customCommand
                 val newCommand = command.trim()
                 state.customCommand = newCommand
                 logger.info("Applied custom command: '$newCommand'")
-                
+
                 // Synchronize session command with frontend if it changed
                 if (newCommand != oldCommand) {
                     try {
@@ -162,7 +170,7 @@ class RovoBridgeConfigurable : Configurable {
                     }
                 }
             }
-            
+
             // Apply UI mode
             uiModeComboBox?.selectedItem?.let { mode ->
                 val modeStr = mode as String
@@ -173,7 +181,7 @@ class RovoBridgeConfigurable : Configurable {
                     throw ConfigurationException("Invalid UI mode. Must be 'Terminal' or 'Canvas'.")
                 }
             }
-            
+
             // Apply font size
             fontSizeSpinner?.value?.let { size ->
                 val fontSize = size as Int
@@ -181,7 +189,7 @@ class RovoBridgeConfigurable : Configurable {
                     val oldFontSize = state.fontSize
                     state.fontSize = fontSize
                     logger.info("Applied font size: $fontSize")
-                    
+
                     // Synchronize font size with frontend if it changed
                     if (fontSize != oldFontSize) {
                         try {
@@ -195,7 +203,24 @@ class RovoBridgeConfigurable : Configurable {
                     throw ConfigurationException("Font size must be between 8 and 72.")
                 }
             }
-            
+
+            // Apply useClipboard setting
+            useClipboardCheckBox?.isSelected?.let { useClipboard ->
+                val oldUseClipboard = state.useClipboard
+                state.useClipboard = useClipboard
+                logger.info("Applied useClipboard: $useClipboard")
+
+                // Synchronize useClipboard with frontend if it changed
+                if (useClipboard != oldUseClipboard) {
+                    try {
+                        paviko.rovobridge.ui.UseClipboardSynchronizer.updateFrontendUseClipboard(useClipboard)
+                    } catch (e: Exception) {
+                        logger.warn("Failed to synchronize useClipboard with frontend", e)
+                        // Don't fail the entire apply operation for sync issues
+                    }
+                }
+            }
+
             logger.info("Settings applied successfully")
         } catch (e: ConfigurationException) {
             logger.error("Configuration validation failed", e)
@@ -205,31 +230,33 @@ class RovoBridgeConfigurable : Configurable {
             throw ConfigurationException("Failed to apply settings: ${e.message}")
         }
     }
-    
+
     override fun reset() {
         try {
             val currentState = settings.state
-            
+
             customCommandField?.text = currentState.customCommand
             uiModeComboBox?.selectedItem = currentState.uiMode
             fontSizeSpinner?.value = currentState.fontSize
-            
+            useClipboardCheckBox?.isSelected = currentState.useClipboard
+
             // Clear any error messages
             commandErrorLabel?.isVisible = false
             fontSizeErrorLabel?.isVisible = false
-            
+
             logger.debug("Settings UI reset to current state")
         } catch (e: Exception) {
             logger.error("Failed to reset settings UI", e)
         }
     }
-    
+
     override fun disposeUIResources() {
         try {
             mainPanel = null
             customCommandField = null
             uiModeComboBox = null
             fontSizeSpinner = null
+            useClipboardCheckBox = null
             commandErrorLabel = null
             fontSizeErrorLabel = null
             logger.debug("Settings UI resources disposed")

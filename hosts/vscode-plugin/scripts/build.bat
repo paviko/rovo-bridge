@@ -158,7 +158,6 @@ if "%MISSING_BINARIES%"=="true" (
     echo [WARN] Some binaries are missing. The extension may not work on all platforms.
     echo [WARN] Run 'scripts\build_rovo_bridge.bat' from the root directory to build all binaries.
 )
-
 REM Step 8: Create package
 echo [INFO] Creating VSCode extension package...
 
@@ -170,8 +169,7 @@ if !errorlevel! neq 0 (
 )
 
 REM Create the package
-for /f "tokens=2 delims==" %%a in ('wmic OS Get localdatetime /value') do set "dt=%%a"
-set "timestamp=%dt:~0,8%-%dt:~8,6%"
+for /f %%a in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd-HHmmss"') do set "timestamp=%%a"
 
 if "%BUILD_TYPE%"=="production" (
     call vsce package --out "rovobridge-%timestamp%.vsix"

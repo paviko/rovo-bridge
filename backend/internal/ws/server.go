@@ -9,19 +9,22 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/gorilla/websocket"
 )
 
+var wsWriteMu sync.Map // map[*websocket.Conn]*sync.Mutex
+
 type Server struct {
-	Token string
-	Upgrader websocket.Upgrader
+	Token     string
+	Upgrader  websocket.Upgrader
 	OnMessage func(conn *websocket.Conn, msg map[string]any)
 	// OnClose is called when the websocket connection is about to close.
 	// It can be used by higher layers to perform cleanup tied to this connection.
 	OnClose func(conn *websocket.Conn)
-	seq uint64
+	seq     uint64
 }
 
 func NewServer(token string) *Server {
@@ -101,6 +104,11 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 		if s.OnClose != nil {
 			s.OnClose(c)
 		}
+		// remove write lock for this connection
+		if v, ok := wsWriteMu.Load(c); ok {
+			wsWriteMu.Delete(c)
+			_ = v // allow GC of the mutex
+		}
 		_ = c.Close()
 	}()
 
@@ -122,7 +130,20 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 
 func SendJSON(c *websocket.Conn, v any) error {
 	buf, err := json.Marshal(v)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
+	// serialize writes per connection
+	var mu *sync.Mutex
+	if v, ok := wsWriteMu.Load(c); ok {
+		mu = v.(*sync.Mutex)
+	} else {
+		m := &sync.Mutex{}
+		actual, _ := wsWriteMu.LoadOrStore(c, m)
+		mu = actual.(*sync.Mutex)
+	}
+	mu.Lock()
+	defer mu.Unlock()
 	return c.WriteMessage(websocket.TextMessage, buf)
 }
 
@@ -132,24 +153,24 @@ func (s *Server) NextSeq() uint64 { return atomic.AddUint64(&s.seq, 1) }
 
 func Hello(c *websocket.Conn) {
 	_ = SendJSON(c, map[string]any{
-		"type": "welcome",
+		"type":      "welcome",
 		"sessionId": "ctrl",
-		"features": map[string]bool{"streaming": true, "pty": true},
+		"features":  map[string]bool{"streaming": true, "pty": true},
 	})
 }
 
 func Stdout(c *websocket.Conn, session string, data []byte, seq uint64) error {
 	return SendJSON(c, map[string]any{
-		"type": "stdout",
-		"sessionId": session,
+		"type":       "stdout",
+		"sessionId":  session,
 		"dataBase64": B64(data),
-		"seq": seq,
+		"seq":        seq,
 	})
 }
 
 func Errorf(c *websocket.Conn, format string, args ...any) {
 	_ = SendJSON(c, map[string]any{
-		"type": "error",
+		"type":    "error",
 		"message": fmt.Sprintf(format, args...),
 	})
 }

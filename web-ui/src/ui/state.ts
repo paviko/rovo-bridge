@@ -36,6 +36,8 @@ export const state = {
   term: null as any,
   fit: null as any,
   fontSize: 12,
+  // preference pushed by host; used to initialize sessions
+  useClipboardPref: undefined as boolean | undefined,
   currentWs: null as WebSocket | null,
   iterationId: 1,
   backslashPending: false,
